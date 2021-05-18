@@ -1,11 +1,17 @@
+#include <constants.h>
 #include <M5Stack.h>
 #include <BLEDevice.h>
-#include <BLEUtils.h>
 #include <BLEServer.h>
 #include <BLE2902.h>
 
-BLEServer *pServer = NULL;
+BLEServer *pServer = nullptr;
+BLEService *pService = nullptr;
 bool deviceConnected = false;
+bool isTemp = true;
+
+using namespace M5Constants;
+static void setupTemp();
+static void setupHumid();
 
 class MyServerCallbacks : public BLEServerCallbacks
 {
@@ -53,6 +59,54 @@ class HumidCallbacks : public BLECharacteristicCallbacks
   }
 };
 
+static void setupTemp()
+{
+  // TEMP CHARACTERISTIC
+  BLECharacteristic *tempCharacteristic = pService->createCharacteristic(TEMP_UUID,
+                                                                         BLECharacteristic::PROPERTY_READ |
+                                                                             BLECharacteristic::PROPERTY_NOTIFY);
+  tempCharacteristic->setCallbacks(new TempCallbacks());
+  // Temp Descriptor
+  BLEDescriptor *tempDescriptor = new BLEDescriptor(DESC_UUID);
+  tempDescriptor->setValue("Temperature -40 to 60°C");
+  tempCharacteristic->addDescriptor(tempDescriptor);
+
+  pService->start();
+
+  BLEAdvertisementData *pData = new BLEAdvertisementData();
+  pData->setCompleteServices(SERVICE_UUID);
+  pData->setName(TEMP_SERVICE_NAME);
+  pData->setServiceData(TEMP_UUID, TEMP_SERVICE_TAG);
+
+  BLEDevice::getAdvertising()->setAdvertisementData(*pData);
+  BLEDevice::startAdvertising();
+  M5.Lcd.println("Temperature Sensor");
+}
+
+static void setupHumid()
+{
+  // HUMIDITY CHARACTERISTIC
+  BLECharacteristic *humidCharacteristic = pService->createCharacteristic(HUMID_UUID,
+                                                                          BLECharacteristic::PROPERTY_READ |
+                                                                              BLECharacteristic::PROPERTY_NOTIFY);
+  humidCharacteristic->setCallbacks(new HumidCallbacks());
+  // Humidity Descriptor
+  BLEDescriptor *humidDescriptor = new BLEDescriptor(DESC_UUID);
+  humidDescriptor->setValue("Humidity 0 to 100%");
+  humidCharacteristic->addDescriptor(humidDescriptor);
+
+  pService->start();
+
+  BLEAdvertisementData *pData = new BLEAdvertisementData();
+  pData->setCompleteServices(SERVICE_UUID);
+  pData->setName(HUMID_SERVICE_NAME);
+  pData->setServiceData(HUMID_UUID, HUMID_SERVICE_TAG);
+
+  BLEDevice::getAdvertising()->setAdvertisementData(*pData);
+  BLEDevice::startAdvertising();
+  M5.Lcd.println("Humidity Sensor");
+}
+
 void setup()
 {
   // Data transmission rate in bps
@@ -66,39 +120,19 @@ void setup()
 
   // Initalize the BLE Dervice
   // Create a Server with a
-  BLEDevice::init("M5-Sensor");
+  BLEDevice::init(DEVICE_NAME);
   BLEServer *pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
-  BLEService *pService = pServer->createService(BLEUUID((uint16_t)0x181A));
+  pService = pServer->createService(SERVICE_UUID);
 
-  if (M5.BtnA.isPressed())
+  if (isTemp)
   {
-
-    // TEMP CHARACTERISTIC
-    BLECharacteristic *tempCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)0x2A6E),
-                                                                           BLECharacteristic::PROPERTY_READ |
-                                                                               BLECharacteristic::PROPERTY_NOTIFY);
-    tempCharacteristic->setCallbacks(new TempCallbacks());
-    // Temp Descriptor
-    BLEDescriptor *tempDescriptor = new BLEDescriptor(BLEUUID((uint16_t)0x2901));
-    tempDescriptor->setValue("Temperature -40 to 60°C");
-    tempCharacteristic->addDescriptor(tempDescriptor);
+    setupTemp();
   }
   else
   {
-    // HUMIDITY CHARACTERISTIC
-    BLECharacteristic *humidCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)0x2A6F),
-                                                                            BLECharacteristic::PROPERTY_READ |
-                                                                                BLECharacteristic::PROPERTY_NOTIFY);
-    humidCharacteristic->setCallbacks(new HumidCallbacks());
-    // Humidity Descriptor
-    BLEDescriptor *humidDescriptor = new BLEDescriptor(BLEUUID((uint16_t)0x2901));
-    humidDescriptor->setValue("Humidity 0 to 100%");
-    humidCharacteristic->addDescriptor(humidDescriptor);
+    setupHumid();
   }
-  pService->start();
-  BLEDevice::getAdvertising()->addServiceUUID(BLEUUID((uint16_t)0x181A));
-  pServer->getAdvertising()->start();
 }
 
 void loop()

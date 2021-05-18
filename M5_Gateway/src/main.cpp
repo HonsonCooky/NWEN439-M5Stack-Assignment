@@ -9,20 +9,19 @@
  * Arduino Studio, then select "No OTA (Large App)" from 
  * Partition Scheme.
  */
+#include <constants.h>
 #include <M5Stack.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
-#include <BLEUtils.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <coap-simple.h>
 #include "time.h"
 
+using namespace M5Constants;
+
 /**
  * SSID and password of the WIFI network
- * TODO: Change these parameters based your WIFI configuration.
- * Note that M5Stack only supports PSK, and EAP and other
- * complicated authentication mechanisms
  */
 
 const char *WIFI_SSID = "The Ira Street Hooligans";
@@ -43,13 +42,12 @@ const int daylightOffset_sec = 3600;
 RTC_DATA_ATTR time_t timestamp = 0;
 
 /**
- * BLE scanner object
+ * BLE scanner objects
  */
-String state = "unconnected"; // unconnected, found, connected
 BLEScan *scanner;
 BLEClient *client;
 BLEAdvertisedDevice *aDevice;
-const BLEUUID SERVICE_UUID = BLEUUID((uint16_t)0x181A);
+string searchingFor;
 
 /**
  * IP address, UDP and Coap instances
@@ -59,20 +57,120 @@ IPAddress wifi_ip;
 WiFiUDP udp;
 Coap coap(udp);
 
+//--------------------------------------------------------------------------
+// SCANNING FOR SERVICES
+//--------------------------------------------------------------------------
+
 /**
- * Example CoAP server callback for /temp URL query
- * You can use this as basis for writing your own callback
- * to implement your design.
+ * Scan for BLE servers and find all services that advertises the service we are looking for.
+ */
+class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
+{
+  void onResult(BLEAdvertisedDevice advertisedDevice)
+  {
+    if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(SERVICE_UUID))
+    {
+      string data = advertisedDevice.getServiceData();
+      if (data.compare(searchingFor) == 0)
+      {
+        aDevice = new BLEAdvertisedDevice(advertisedDevice);
+        BLEDevice::getScan()->stop();
+      }
+    }
+  }
+};
+
+//--------------------------------------------------------------------------
+// REPLYING TO COAP
+//--------------------------------------------------------------------------
+
+/** 
+ * readAttr:
+ * - Given a boolean and service to read from
+ * - if the service is null, then we haven't found a service we need
+ * - if we are looking for temp, but no characteristic is available
+ *      then we haven't found the service
+ * - if we are looking for temp and the characteristic is found then
+ *      read the uint8_t from the service, convert it to a const char*
+ *      and return the value
+ * - do the same as temp for humidity
+ */
+static const char *readAttr(bool isTemp, BLERemoteService *from)
+{
+  if (from != nullptr)
+  {
+    if (isTemp)
+    {
+      if (from->getCharacteristic(TEMP_UUID) != nullptr)
+        return strdup(String((int8_t)from->getCharacteristic(TEMP_UUID)->readUInt8()).c_str());
+      else
+        return "No Temperature Reading";
+    }
+    else
+    {
+      if (from->getCharacteristic(HUMID_UUID) != nullptr)
+        return strdup(String((int8_t)from->getCharacteristic(HUMID_UUID)->readUInt8()).c_str());
+      else
+        return "No Humidity Reading";
+    }
+  }
+  else
+    return "No Sensor Found";
+}
+
+/**
+ * getRes:
+ * - Scan for devices
+ * - Connect to device
+ * - Get the result we are looking for
+ * - Return the result
+ */
+static const char *getRes(bool isTemp)
+{
+  // Start the scanner
+  scanner->start(5, false);
+  M5.Lcd.println("Scan done!");
+  scanner->clearResults(); // delete results fromBLEScan buffer to release memory
+
+  if (client == nullptr || aDevice == nullptr)
+  {
+    return "No Devices Found";
+  }
+
+  // Connect to the device
+  M5.Lcd.println("Connecting...");
+  client->connect(aDevice);
+
+  // Get Service
+  M5.Lcd.println("Getting Service...");
+  BLERemoteService *service = client->getService(SERVICE_UUID);
+  const char *res = readAttr(isTemp, service);
+
+  // Disconnect from device and reset device
+  client->disconnect();
+  aDevice = nullptr;
+
+  // Return the result
+  return res;
+}
+
+/**
+ * Temperature CoAP Callback:
+ * - Call getRes (see above) for result
+ * - Send the result to the CoAP server
  */
 void callback_temp(CoapPacket &packet, IPAddress ip, int port)
 {
+  // Print status to know we recieved the call
   M5.Lcd.println("CoAP /temp query received");
+  searchingFor = TEMP_SERVICE_TAG;
+  const char *res = getRes(true);
 
   // Send response
-  char *payload = "temp=25";
-  int ret = coap.sendResponse(ip, port, packet.messageid, payload, strlen(payload),
+  int ret = coap.sendResponse(ip, port, packet.messageid, res, strlen(res),
                               COAP_CONTENT, COAP_TEXT_PLAIN, packet.token, packet.tokenlen);
 
+  // Print status of sent response
   if (ret)
     M5.Lcd.println("Sent response");
   else
@@ -80,47 +178,71 @@ void callback_temp(CoapPacket &packet, IPAddress ip, int port)
 }
 
 /**
- * Scan for BLE servers and find the first one that advertises the service we are looking for.
+ * Humidity CoAP Callback:
+ * - Call getRes (see above) for result
+ * - Send the result to the CoAP server
  */
-class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
+void callback_humidity(CoapPacket &packet, IPAddress ip, int port)
 {
-  /**
-   * Called for each advertising BLE server.
-   */
-  void onResult(BLEAdvertisedDevice advertisedDevice)
-  {
-    // We have found a device, let us now see if it contains the service we are looking for.
-    if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(SERVICE_UUID))
-    {
-      state = "found";
-      aDevice = new BLEAdvertisedDevice(advertisedDevice);
-      BLEDevice::getScan()->stop();
+  // Print status to know we recieved the call
+  M5.Lcd.println("CoAP /humidity query received");
+  searchingFor = HUMID_SERVICE_TAG;
+  const char *res = getRes(false);
 
-    } // Found our server
-  }   // onResult
-};    // MyAdvertisedDeviceCallbacks
+  // Send response
+  int ret = coap.sendResponse(ip, port, packet.messageid, res, strlen(res),
+                              COAP_CONTENT, COAP_TEXT_PLAIN, packet.token, packet.tokenlen);
+
+  // Print status of sent response
+  if (ret)
+    M5.Lcd.println("Sent response");
+  else
+    M5.Lcd.println("Failed to send response");
+}
 
 /**
- * Write code that will be run once during startup
- * in setup() function.
+ * Unknown CoAP Callback
+ */
+void callback_unknown(CoapPacket &packet, IPAddress ip, int port)
+{
+  // Print status to know we recieved the call
+  const char *res = "Unknown Command";
+
+  // Send response
+  int ret = coap.sendResponse(ip, port, packet.messageid, res, strlen(res),
+                              COAP_CONTENT, COAP_TEXT_PLAIN, packet.token, packet.tokenlen);
+
+  // Print status of sent response
+  if (ret)
+    M5.Lcd.println("Sent response");
+  else
+    M5.Lcd.println("Failed to send response");
+}
+
+//--------------------------------------------------------------------------
+// SETUP AND LOOP
+//--------------------------------------------------------------------------
+
+/**
+ * Setup:
+ * - Start the M5Stack
+ * - Initialize the BLE device, and BLE scanner
+ * - Create a client to connect to BLE devices
+ * - Initalize WIFI
+ * - Synchronize time
+ * - Initalize CoAP 
  */
 void setup()
 {
-
   // Initialize the M5Stack object
   M5.begin();
-
-  // Power
   M5.Power.begin();
-
-  // Clear screen and lower brightness to save power
   M5.Lcd.clear();
   M5.Lcd.setBrightness(30);
 
-  M5.Lcd.println("Gateway node starting...");
-
   // Initialize BLE
   BLEDevice::init("M5-Gateway");
+
   // Create BLE scanner
   scanner = BLEDevice::getScan();
   scanner->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks());
@@ -128,68 +250,38 @@ void setup()
   scanner->setInterval(100);
   scanner->setWindow(99); // less or equal setInterval value
 
+  // Initalize the client to read
   client = BLEDevice::createClient();
 
-  // // Initialize WIFI
-  // WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  // while (WiFi.status() != WL_CONNECTED)
-  //   delay(1000);
-  // M5.Lcd.print("Connected to WIFI with IP address ");
-  // wifi_ip = WiFi.localIP();
-  // M5.Lcd.println(wifi_ip);
+  // Initialize WIFI
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED)
+    delay(1000);
+  M5.Lcd.print("Connected to WIFI with IP address ");
+  wifi_ip = WiFi.localIP();
+  M5.Lcd.println(wifi_ip);
 
-  // // Do time sync. Make sure gateway can connect to
-  // // Internet (i.e., your WiFi AP must be connected to Internet)
-  // configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
-  // delay(2000);
-  // time(&timestamp);
-  // M5.Lcd.println("Current time is " + String(timestamp));
+  // Do time sync. Make sure gateway can connect to
+  // Internet (i.e., your WiFi AP must be connected to Internet)
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
+  delay(2000);
+  time(&timestamp);
+  M5.Lcd.println("Current time is " + String(timestamp));
 
-  // // Initialize CoAP
-  // // TODO: Add server url endpoints
-  // // You can add multiple endpoint urls, examples:
-  // //   coap.server(callback_switch, "switch");
-  // //   coap.server(callback_temp, "temp");
-  // //   coap.server(callback_humidity, "humidity");
-
-  // // Example url/callback
-  // coap.server(callback_temp, "temp");
-
-  // // start coap server/client
-  // coap.start();
+  // CoAP server implementation
+  coap.server(callback_temp, "temp");
+  coap.server(callback_humidity, "humidity");
+  coap.response(callback_unknown);
+  coap.start();
 }
 
 /**
- * Write code that will be run repeatedly in loop()
+ * Looping:
+ * Wait 1 second
+ * run the CoAP loop
  */
 void loop()
 {
-  if (state = "found")
-  {
-    client->connect(aDevice);
-    state = "connected";
-  } else if (state = "connected")
-  {
-    M5.Lcd.println("BLE Advertised Device found: ");
-    M5.Lcd.println(aDevice->toString().c_str());
-    // Connect to the server
-    // Get Service
-    BLERemoteService *service = client->getService(SERVICE_UUID);
-    // Get Temp Characteristic
-    BLERemoteCharacteristic *tempCharacteristic = service->getCharacteristic(BLEUUID((uint16_t)0x2A6E));
-    // Get Temp Value
-    int8_t value = (int8_t)tempCharacteristic->readUInt8();
-    // Print value
-    M5.Lcd.println(value);
-    state = "unconnected";
-  }
-  else
-  {
-    BLEScanResults foundDevices = scanner->start(5, false);
-    M5.Lcd.print("Devices found: ");
-    M5.Lcd.println(foundDevices.getCount());
-    M5.Lcd.println("Scan done!");
-    scanner->clearResults(); // delete results fromBLEScan buffer to release memory
-  }
   delay(1000);
+  coap.loop();
 }
