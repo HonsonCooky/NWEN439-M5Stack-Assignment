@@ -32,8 +32,8 @@ const char *WIFI_PASSWORD = "D1CKD33P1NCR4ZY";
  */
 const char *ntpServer1 = "oceania.pool.ntp.org";
 const char *ntpServer2 = "time.nist.gov";
-const long gmtOffset_sec = (13) * 60 * 60;
-const int daylightOffset_sec = 3600;
+const long gmtOffset_sec = (12) * 60 * 60;
+const int daylightOffset_sec = 0;
 
 /**
  * Unix timestamp
@@ -47,6 +47,7 @@ RTC_DATA_ATTR time_t timestamp = 0;
 BLEScan *scanner;
 BLEClient *client;
 BLEAdvertisedDevice *aDevice;
+BLEUUID searchingUUID;
 string searchingFor;
 
 /**
@@ -68,14 +69,10 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 {
   void onResult(BLEAdvertisedDevice advertisedDevice)
   {
-    if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(SERVICE_UUID))
+    if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(SERVICE_UUID) && advertisedDevice.getServiceDataUUID().equals(searchingUUID) && advertisedDevice.getServiceData().compare(searchingFor) == 0)
     {
-      string data = advertisedDevice.getServiceData();
-      if (data.compare(searchingFor) == 0)
-      {
-        aDevice = new BLEAdvertisedDevice(advertisedDevice);
-        BLEDevice::getScan()->stop();
-      }
+      aDevice = new BLEAdvertisedDevice(advertisedDevice);
+      BLEDevice::getScan()->stop();
     }
   }
 };
@@ -97,22 +94,29 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
  */
 static const char *readAttr(bool isTemp, BLERemoteService *from)
 {
+  time(&timestamp);
   if (from != nullptr)
   {
-    if (isTemp)
+    if (isTemp && from->getCharacteristic(TEMP_UUID) != nullptr)
     {
-      if (from->getCharacteristic(TEMP_UUID) != nullptr)
-        return strdup(String((int8_t)from->getCharacteristic(TEMP_UUID)->readUInt8()).c_str());
-      else
-        return "No Temperature Reading";
+      // Get the temperature characteristic
+      BLERemoteCharacteristic *rc = from->getCharacteristic(TEMP_UUID);
+      // Read the value from uint8_t to int8_t
+      int8_t value = (int8_t)rc->readUInt8();
+      // Convert the int8_t to a const char*
+      return strdup(String(String(value) + "°C").c_str());
+    }
+    else if (!isTemp && from->getCharacteristic(HUMID_UUID) != nullptr)
+    {
+      // Get the temperature characteristic
+      BLERemoteCharacteristic *rc = from->getCharacteristic(HUMID_UUID);
+      // Read the value from uint8_t to int8_t
+      int8_t value = (int8_t)rc->readUInt8();
+      // Convert the int8_t to a const char*
+      return strdup(String(String(value) + "%").c_str());
     }
     else
-    {
-      if (from->getCharacteristic(HUMID_UUID) != nullptr)
-        return strdup(String((int8_t)from->getCharacteristic(HUMID_UUID)->readUInt8()).c_str());
-      else
-        return "No Humidity Reading";
-    }
+      return "No Found Reading";
   }
   else
     return "No Sensor Found";
@@ -138,8 +142,14 @@ static const char *getRes(bool isTemp)
   }
 
   // Connect to the device
+  M5.Lcd.println(aDevice->getName().c_str());
   M5.Lcd.println("Connecting...");
-  client->connect(aDevice);
+  bool connected = client->connect(aDevice);
+
+  if (!connected)
+  {
+    return "Unable to connect to device";
+  }
 
   // Get Service
   M5.Lcd.println("Getting Service...");
@@ -148,7 +158,7 @@ static const char *getRes(bool isTemp)
 
   // Disconnect from device and reset device
   client->disconnect();
-  aDevice = nullptr;
+  delete (aDevice);
 
   // Return the result
   return res;
@@ -163,11 +173,13 @@ void callback_temp(CoapPacket &packet, IPAddress ip, int port)
 {
   // Print status to know we recieved the call
   M5.Lcd.println("CoAP /temp query received");
+  searchingUUID = TEMP_UUID;
   searchingFor = TEMP_SERVICE_TAG;
   const char *res = getRes(true);
+  char *output = strdup(String(String(timestamp) + " : " + String(res)).c_str());
 
   // Send response
-  int ret = coap.sendResponse(ip, port, packet.messageid, res, strlen(res),
+  int ret = coap.sendResponse(ip, port, packet.messageid, output, strlen(output),
                               COAP_CONTENT, COAP_TEXT_PLAIN, packet.token, packet.tokenlen);
 
   // Print status of sent response
@@ -186,30 +198,13 @@ void callback_humidity(CoapPacket &packet, IPAddress ip, int port)
 {
   // Print status to know we recieved the call
   M5.Lcd.println("CoAP /humidity query received");
+  searchingUUID = HUMID_UUID;
   searchingFor = HUMID_SERVICE_TAG;
   const char *res = getRes(false);
+  char *output = strdup(String(String(timestamp) + " : " + String(res)).c_str());
 
   // Send response
-  int ret = coap.sendResponse(ip, port, packet.messageid, res, strlen(res),
-                              COAP_CONTENT, COAP_TEXT_PLAIN, packet.token, packet.tokenlen);
-
-  // Print status of sent response
-  if (ret)
-    M5.Lcd.println("Sent response");
-  else
-    M5.Lcd.println("Failed to send response");
-}
-
-/**
- * Unknown CoAP Callback
- */
-void callback_unknown(CoapPacket &packet, IPAddress ip, int port)
-{
-  // Print status to know we recieved the call
-  const char *res = "Unknown Command";
-
-  // Send response
-  int ret = coap.sendResponse(ip, port, packet.messageid, res, strlen(res),
+  int ret = coap.sendResponse(ip, port, packet.messageid, output, strlen(output),
                               COAP_CONTENT, COAP_TEXT_PLAIN, packet.token, packet.tokenlen);
 
   // Print status of sent response
@@ -239,6 +234,7 @@ void setup()
   M5.Power.begin();
   M5.Lcd.clear();
   M5.Lcd.setBrightness(30);
+  M5.Lcd.println("Starting Gateway...");
 
   // Initialize BLE
   BLEDevice::init("M5-Gateway");
@@ -251,7 +247,6 @@ void setup()
   scanner->setWindow(99); // less or equal setInterval value
 
   // Initalize the client to read
-  client = BLEDevice::createClient();
 
   // Initialize WIFI
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -271,7 +266,6 @@ void setup()
   // CoAP server implementation
   coap.server(callback_temp, "temp");
   coap.server(callback_humidity, "humidity");
-  coap.response(callback_unknown);
   coap.start();
 }
 
@@ -282,6 +276,8 @@ void setup()
  */
 void loop()
 {
-  delay(1000);
+  delete(client);
+  client = BLEDevice::createClient();
   coap.loop();
+  delay(2000);
 }

@@ -7,11 +7,8 @@
 BLEServer *pServer = nullptr;
 BLEService *pService = nullptr;
 bool deviceConnected = false;
-bool isTemp = true;
 
 using namespace M5Constants;
-static void setupTemp();
-static void setupHumid();
 
 class MyServerCallbacks : public BLEServerCallbacks
 {
@@ -25,7 +22,7 @@ class MyServerCallbacks : public BLEServerCallbacks
   {
     M5.Lcd.println("disconnect");
     deviceConnected = false;
-    M5.Power.reset();
+    pServer->startAdvertising();
   }
 };
 
@@ -34,7 +31,7 @@ class TempCallbacks : public BLECharacteristicCallbacks
   void onRead(BLECharacteristic *tempCharacteristic)
   {
     int8_t tempOut = random(100) - 40;
-    tempCharacteristic->setValue((uint8_t *)&tempOut, 2);
+    tempCharacteristic->setValue((uint8_t *)&tempOut, 1);
     tempCharacteristic->notify();
   }
 
@@ -49,7 +46,7 @@ class HumidCallbacks : public BLECharacteristicCallbacks
   void onRead(BLECharacteristic *humidCharacteristic)
   {
     int8_t humidOut = random(100);
-    humidCharacteristic->setValue((uint8_t *)&humidOut, 2);
+    humidCharacteristic->setValue((uint8_t *)&humidOut, 1);
     humidCharacteristic->notify();
   }
 
@@ -58,54 +55,6 @@ class HumidCallbacks : public BLECharacteristicCallbacks
     M5.Lcd.println("Read Humidity");
   }
 };
-
-static void setupTemp()
-{
-  // TEMP CHARACTERISTIC
-  BLECharacteristic *tempCharacteristic = pService->createCharacteristic(TEMP_UUID,
-                                                                         BLECharacteristic::PROPERTY_READ |
-                                                                             BLECharacteristic::PROPERTY_NOTIFY);
-  tempCharacteristic->setCallbacks(new TempCallbacks());
-  // Temp Descriptor
-  BLEDescriptor *tempDescriptor = new BLEDescriptor(DESC_UUID);
-  tempDescriptor->setValue("Temperature -40 to 60°C");
-  tempCharacteristic->addDescriptor(tempDescriptor);
-
-  pService->start();
-
-  BLEAdvertisementData *pData = new BLEAdvertisementData();
-  pData->setCompleteServices(SERVICE_UUID);
-  pData->setName(TEMP_SERVICE_NAME);
-  pData->setServiceData(TEMP_UUID, TEMP_SERVICE_TAG);
-
-  BLEDevice::getAdvertising()->setAdvertisementData(*pData);
-  BLEDevice::startAdvertising();
-  M5.Lcd.println("Temperature Sensor");
-}
-
-static void setupHumid()
-{
-  // HUMIDITY CHARACTERISTIC
-  BLECharacteristic *humidCharacteristic = pService->createCharacteristic(HUMID_UUID,
-                                                                          BLECharacteristic::PROPERTY_READ |
-                                                                              BLECharacteristic::PROPERTY_NOTIFY);
-  humidCharacteristic->setCallbacks(new HumidCallbacks());
-  // Humidity Descriptor
-  BLEDescriptor *humidDescriptor = new BLEDescriptor(DESC_UUID);
-  humidDescriptor->setValue("Humidity 0 to 100%");
-  humidCharacteristic->addDescriptor(humidDescriptor);
-
-  pService->start();
-
-  BLEAdvertisementData *pData = new BLEAdvertisementData();
-  pData->setCompleteServices(SERVICE_UUID);
-  pData->setName(HUMID_SERVICE_NAME);
-  pData->setServiceData(HUMID_UUID, HUMID_SERVICE_TAG);
-
-  BLEDevice::getAdvertising()->setAdvertisementData(*pData);
-  BLEDevice::startAdvertising();
-  M5.Lcd.println("Humidity Sensor");
-}
 
 void setup()
 {
@@ -125,17 +74,55 @@ void setup()
   pServer->setCallbacks(new MyServerCallbacks());
   pService = pServer->createService(SERVICE_UUID);
 
-  if (isTemp)
+  BLEAdvertisementData *pData = new BLEAdvertisementData();
+  pData->setCompleteServices(SERVICE_UUID);
+
+  if (M5.BtnA.isPressed())
   {
-    setupTemp();
+    // TEMP CHARACTERISTIC
+    BLECharacteristic *tempCharacteristic = pService->createCharacteristic(TEMP_UUID,
+                                                                           BLECharacteristic::PROPERTY_READ |
+                                                                               BLECharacteristic::PROPERTY_NOTIFY);
+    tempCharacteristic->setCallbacks(new TempCallbacks());
+    // Temp Descriptor
+    BLEDescriptor *tempDescriptor = new BLEDescriptor(DESC_UUID);
+    tempDescriptor->setValue("Temperature -40 to 60°C");
+    tempCharacteristic->addDescriptor(tempDescriptor);
+
+    // Set data type
+    pData->setServiceData(TEMP_UUID, TEMP_SERVICE_TAG);
+
+    M5.Lcd.println("Temperature Sensor");
   }
   else
   {
-    setupHumid();
+    // HUMID CHARACTERISTIC
+    BLECharacteristic *humidCharacteristic = pService->createCharacteristic(HUMID_UUID,
+                                                                            BLECharacteristic::PROPERTY_READ |
+                                                                                BLECharacteristic::PROPERTY_NOTIFY);
+    humidCharacteristic->setCallbacks(new HumidCallbacks());
+    // HUMID Descriptor
+    BLEDescriptor *humidDescriptor = new BLEDescriptor(DESC_UUID);
+    humidDescriptor->setValue("Humidity 0 to 100\%");
+    humidCharacteristic->addDescriptor(humidDescriptor);
+
+    
+    // Set data type
+    pData->setServiceData(HUMID_UUID, HUMID_SERVICE_TAG);
+
+    M5.Lcd.println("Humidity Sensor");
   }
+
+    pService->start();
+    pServer->getAdvertising()->setAdvertisementData(*pData);
+    pServer->startAdvertising();
 }
 
 void loop()
 {
   M5.update();
+  if (M5.BtnB.isPressed())
+  {
+    M5.Power.reset();
+  }
 }

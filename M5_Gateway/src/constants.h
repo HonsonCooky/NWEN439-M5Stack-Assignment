@@ -10,8 +10,6 @@ namespace M5Constants
     BLEUUID DESC_UUID = BLEUUID((uint16_t)0x2901);
 
     string DEVICE_NAME = "M5-Sensor";
-    string TEMP_SERVICE_NAME = "TEMP SENSOR";
-    string HUMID_SERVICE_NAME = "HUMID SENSOR";
-    string TEMP_SERVICE_TAG = "TEMP DATA";
     string HUMID_SERVICE_TAG = "HUMID DATA";
+    string TEMP_SERVICE_TAG = "TEMP DATA";
 }
