@@ -2,11 +2,11 @@
  * Base code for gateway node development in NWEN439
  * You will need to modify this code to implement the necessary
  * features specified in the handout.
- * 
+ *
  * Important: The compiled code for this module is quite
- * big so you will need to change the partition scheme to 
- * "No OTA (Large App)". To do this, click "Tools" on 
- * Arduino Studio, then select "No OTA (Large App)" from 
+ * big so you will need to change the partition scheme to
+ * "No OTA (Large App)". To do this, click "Tools" on
+ * Arduino Studio, then select "No OTA (Large App)" from
  * Partition Scheme.
  */
 #include <constants.h>
@@ -24,8 +24,8 @@ using namespace M5Constants;
  * SSID and password of the WIFI network
  */
 
-const char *WIFI_SSID = "The Ira Street Hooligans";
-const char *WIFI_PASSWORD = "D1CKD33P1NCR4ZY";
+const char *WIFI_SSID = "";
+const char *WIFI_PASSWORD = "";
 
 /**
  * Time synchronization related stuff
@@ -81,7 +81,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 // REPLYING TO COAP
 //--------------------------------------------------------------------------
 
-/** 
+/**
  * readAttr:
  * - Given a boolean and service to read from
  * - if the service is null, then we haven't found a service we need
@@ -225,7 +225,7 @@ void callback_humidity(CoapPacket &packet, IPAddress ip, int port)
  * - Create a client to connect to BLE devices
  * - Initalize WIFI
  * - Synchronize time
- * - Initalize CoAP 
+ * - Initalize CoAP
  */
 void setup()
 {
