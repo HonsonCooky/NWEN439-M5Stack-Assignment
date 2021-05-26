@@ -276,8 +276,8 @@ void setup()
  */
 void loop()
 {
+  delay(1000);
   delete(client);
   client = BLEDevice::createClient();
   coap.loop();
-  delay(2000);
 }
