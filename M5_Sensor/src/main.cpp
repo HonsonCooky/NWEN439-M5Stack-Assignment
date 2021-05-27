@@ -21,8 +21,8 @@ BLEAdvertisementData *pData;
 bool dutyCycleOn = false;
 BLESensorState curState;
 time_t timestamp = 0;
-const int ADVERT_TIME_SEC = 5;
-const int SLEEP_TIME_SEC = 5;
+const int ADVERT_TIME_SEC = 1;
+const int SLEEP_TIME_SEC = 3;
 
 using namespace M5Constants;
 
@@ -53,12 +53,8 @@ void stateLoop()
   case connected:
     break;
   case standby:
-    if (dutyCycleOn)
-    {
-      M5.Power.lightSleep(SLEEP_SEC(SLEEP_TIME_SEC)); // Sleep at the start of every standby.
-    }
-    updateState(advertising);
     pServer->getAdvertising()->start();
+    updateState(advertising);
     break;
   case advertising:
     if (dutyCycleOn) // If we are duty cycling
@@ -70,6 +66,8 @@ void stateLoop()
       if (diff >= ADVERT_TIME_SEC) // If the difference is ADVERT_TIME_SEC seconds or more...
       {
         updateState(standby);
+        int sleepTime = SLEEP_TIME_SEC - (diff * 1000 - SLEEP_TIME_SEC * 1000);
+        M5.Power.lightSleep(SLEEP_MSEC(sleepTime)); // Sleep at the start of every standby.
       }
     } // If we are not duty cycling, then just ignore this state.
   }

@@ -70,10 +70,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 {
   void onResult(BLEAdvertisedDevice advertisedDevice)
   {
-    if (advertisedDevice.haveServiceUUID() 
-    && advertisedDevice.isAdvertisingService(SERVICE_UUID) 
-    && advertisedDevice.getServiceDataUUID().equals(searchingUUID) 
-    && advertisedDevice.getServiceData().compare(searchingFor) == 0)
+    if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(SERVICE_UUID) && advertisedDevice.getServiceDataUUID().equals(searchingUUID) && advertisedDevice.getServiceData().compare(searchingFor) == 0)
     {
       aDevice = new BLEAdvertisedDevice(advertisedDevice);
       BLEDevice::getScan()->stop();
@@ -145,7 +142,6 @@ static const char *getRes(bool isTemp)
   }
 
   // Connect to the device
-  M5.Lcd.println(aDevice->getName().c_str());
   bool connected = client->connect(aDevice);
 
   if (!connected)
@@ -154,13 +150,11 @@ static const char *getRes(bool isTemp)
   }
 
   // Get Service
-  M5.Lcd.println("Getting Service...");
   BLERemoteService *service = client->getService(SERVICE_UUID);
   const char *res = readAttr(isTemp, service);
 
   // Disconnect from device and reset device
   client->disconnect();
-  delete (aDevice);
 
   // Return the result
   return res;
@@ -183,12 +177,16 @@ void callback_temp(CoapPacket &packet, IPAddress ip, int port)
   // Send response
   int ret = coap.sendResponse(ip, port, packet.messageid, output, strlen(output),
                               COAP_CONTENT, COAP_TEXT_PLAIN, packet.token, packet.tokenlen);
-
   // Print status of sent response
   if (ret)
     M5.Lcd.println("Sent response");
   else
     M5.Lcd.println("Failed to send response");
+    
+  delete(aDevice);
+  delete(client);
+  client = BLEDevice::createClient();
+  delay(1000);
 }
 
 /**
@@ -214,6 +212,11 @@ void callback_humidity(CoapPacket &packet, IPAddress ip, int port)
     M5.Lcd.println("Sent response");
   else
     M5.Lcd.println("Failed to send response");
+
+  delete(aDevice);
+  delete(client);
+  client = BLEDevice::createClient();
+  delay(1000);
 }
 
 //--------------------------------------------------------------------------
@@ -245,8 +248,9 @@ void setup()
   scanner = BLEDevice::getScan();
   scanner->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks());
   scanner->setActiveScan(true); //active scan uses more power, but get results faster
-  scanner->setInterval(100);
-  scanner->setWindow(99); // less or equal setInterval value
+  int scanInter = SCAN_TIME_SEC * 1000 / 5;
+  scanner->setInterval(scanInter);
+  scanner->setWindow(scanInter*2/3); // less or equal setInterval value
 
   // Initalize the client to read
 
@@ -277,7 +281,6 @@ void setup()
  */
 void loop()
 {
-  delete(client);
-  client = BLEDevice::createClient();
+  delay(1000);
   coap.loop();
 }

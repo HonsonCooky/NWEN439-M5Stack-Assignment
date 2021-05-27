@@ -2,8 +2,9 @@
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
-#include <ctime>
+#include <chrono>
 
+using namespace std::chrono;
 using namespace std;
 
 string ip = "192.168.50.179";
@@ -38,21 +39,23 @@ bool exec(bool isTemp) {
 }
 
 void runTests(){
-  cout << "Testing Temps" << "\n";
-  long int start = static_cast<long int> (time(nullptr));
+  cout << "Testing Temps" << endl;
+  auto start = high_resolution_clock::now();
   for (int i = 0; i < 10; i++){
     exec(true);
   }
-  long int  end = static_cast<long int> (time(nullptr));
-  std::cout << end - start << " seconds, with " << "\n";
-    cout << "Testing Humids" << "\n";
-  start = static_cast<long int> (time(nullptr));
+  auto stop = high_resolution_clock::now();
+  auto duration = duration_cast<microseconds>(stop - start);
+  cout << duration.count() << " microseconds" << endl;
+
+  cout << "Testing Humids" << endl;
+  start = high_resolution_clock::now();
   for (int i = 0; i < 10; i++){
     exec(false);
   }
-  end = static_cast<long int> (time(nullptr));
-  std::cout << end - start << " seconds, with " << "\n";
-
+  stop = high_resolution_clock::now();
+  duration = duration_cast<microseconds>(stop - start);
+  cout << duration.count() << " microseconds" << endl;
 }
 
 
