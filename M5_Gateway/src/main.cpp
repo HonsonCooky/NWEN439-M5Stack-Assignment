@@ -40,7 +40,7 @@ const int daylightOffset_sec = 0;
  * Once gateway is time synced, you can use this timestamp
  */
 RTC_DATA_ATTR time_t timestamp = 0;
-const int SCAN_TIME_SEC = 5;
+const int SCAN_TIME_SEC = 6;
 
 /**
  * BLE scanner objects
@@ -186,7 +186,7 @@ void callback_temp(CoapPacket &packet, IPAddress ip, int port)
   delete(aDevice);
   delete(client);
   client = BLEDevice::createClient();
-  delay(1000);
+  delay(100);
 }
 
 /**
@@ -216,7 +216,7 @@ void callback_humidity(CoapPacket &packet, IPAddress ip, int port)
   delete(aDevice);
   delete(client);
   client = BLEDevice::createClient();
-  delay(1000);
+  delay(100);
 }
 
 //--------------------------------------------------------------------------
@@ -253,6 +253,7 @@ void setup()
   scanner->setWindow(scanInter*2/3); // less or equal setInterval value
 
   // Initalize the client to read
+  client = BLEDevice::createClient();
 
   // Initialize WIFI
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -281,5 +282,6 @@ void setup()
  */
 void loop()
 {
+  delay(100);
   coap.loop();
 }

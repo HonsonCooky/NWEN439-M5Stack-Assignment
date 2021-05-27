@@ -21,7 +21,7 @@ BLEAdvertisementData *pData;
 bool dutyCycleOn = false;
 BLESensorState curState;
 time_t timestamp = 0;
-const int ADVERT_TIME_SEC = 1;
+const int ADVERT_TIME_SEC = 5;
 const int SLEEP_TIME_SEC = 5;
 
 using namespace M5Constants;
