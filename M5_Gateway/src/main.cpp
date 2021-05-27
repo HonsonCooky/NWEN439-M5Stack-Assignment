@@ -281,6 +281,5 @@ void setup()
  */
 void loop()
 {
-  delay(1000);
   coap.loop();
 }

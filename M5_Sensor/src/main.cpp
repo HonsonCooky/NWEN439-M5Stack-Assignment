@@ -22,7 +22,7 @@ bool dutyCycleOn = false;
 BLESensorState curState;
 time_t timestamp = 0;
 const int ADVERT_TIME_SEC = 1;
-const int SLEEP_TIME_SEC = 3;
+const int SLEEP_TIME_SEC = 5;
 
 using namespace M5Constants;
 
@@ -62,12 +62,11 @@ void stateLoop()
       // Calculate the difference in time since last update
       time_t curTime = 0;
       time(&curTime);
-      double diff = difftime(curTime, timestamp);
-      if (diff >= ADVERT_TIME_SEC) // If the difference is ADVERT_TIME_SEC seconds or more...
+      int diff = difftime(curTime, timestamp);
+      if (diff > ADVERT_TIME_SEC) // If the difference is ADVERT_TIME_SEC seconds or more...
       {
         updateState(standby);
-        int sleepTime = SLEEP_TIME_SEC - (diff * 1000 - SLEEP_TIME_SEC * 1000);
-        M5.Power.lightSleep(SLEEP_MSEC(sleepTime)); // Sleep at the start of every standby.
+        M5.Power.lightSleep(SLEEP_SEC(SLEEP_TIME_SEC)); // Sleep at the start of every standby.
       }
     } // If we are not duty cycling, then just ignore this state.
   }

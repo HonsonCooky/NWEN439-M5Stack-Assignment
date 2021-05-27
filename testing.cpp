@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string>
 #include <chrono>
+#include<unistd.h>
 
 using namespace std::chrono;
 using namespace std;
@@ -10,6 +11,7 @@ using namespace std;
 string ip = "192.168.50.179";
 string humidity = "/humidity\"";
 string temp = "/temp\"";
+unsigned int microsecond = 1000000/4;
 
 bool exec(bool isTemp) {
   char buffer[128];
@@ -43,19 +45,21 @@ void runTests(){
   auto start = high_resolution_clock::now();
   for (int i = 0; i < 10; i++){
     exec(true);
+    usleep(microsecond);
   }
   auto stop = high_resolution_clock::now();
   auto duration = duration_cast<microseconds>(stop - start);
-  cout << duration.count() << " microseconds" << endl;
+  cout << duration.count()/10 << " microseconds" << endl;
 
   cout << "Testing Humids" << endl;
   start = high_resolution_clock::now();
   for (int i = 0; i < 10; i++){
     exec(false);
+    usleep(microsecond);
   }
   stop = high_resolution_clock::now();
   duration = duration_cast<microseconds>(stop - start);
-  cout << duration.count() << " microseconds" << endl;
+  cout << duration.count()/10 << " microseconds" << endl;
 }
 
 
