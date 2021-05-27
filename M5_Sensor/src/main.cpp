@@ -21,7 +21,7 @@ BLEAdvertisementData *pData;
 bool dutyCycleOn = false;
 BLESensorState curState;
 time_t timestamp = 0;
-const int ADVERT_TIME_SEC = 1;
+const int ADVERT_TIME_SEC = 5;
 const int SLEEP_TIME_SEC = 5;
 
 using namespace M5Constants;
@@ -31,7 +31,7 @@ using namespace M5Constants;
 //-----------------------------------------------------------------------------
 
 /**
- * Updating the state should also update the 
+ * Updating the state should also update the
  * timestamp, as such, this method ensures both are done
  * on state update.
  */
@@ -42,7 +42,7 @@ void updateState(BLESensorState newState)
 }
 
 /**
- * Depending on the state of the Sensor, 
+ * Depending on the state of the Sensor,
  * determine the next actions to be taken
  * during this time.
  */
@@ -53,6 +53,10 @@ void stateLoop()
   case connected:
     break;
   case standby:
+    if (dutyCycleOn)
+    {
+      M5.Power.lightSleep(SLEEP_SEC(SLEEP_TIME_SEC)); // Sleep at the start of every standby.
+    }
     updateState(advertising);
     pServer->getAdvertising()->start();
     break;
@@ -65,9 +69,7 @@ void stateLoop()
       double diff = difftime(curTime, timestamp);
       if (diff >= ADVERT_TIME_SEC) // If the difference is ADVERT_TIME_SEC seconds or more...
       {
-        updateState(standby);                                       // Then we need to sleep for...
-        int sleepTime = SLEEP_TIME_SEC - (diff - ADVERT_TIME_SEC); // seconds until the next interval
-        M5.Power.lightSleep(SLEEP_SEC(sleepTime));
+        updateState(standby);
       }
     } // If we are not duty cycling, then just ignore this state.
   }
@@ -231,13 +233,14 @@ void setupHumitidy()
 
 /**
  * Called during the setup process,
- * if certain buttons are pressed, alter the 
+ * if certain buttons are pressed, alter the
  * state in which this device will run.
- * 
+ *
  * ButtonA: If pressed, Temperature sensor, else, Humidity Sensor
  * ButtonC: If pressed, Duty Cycling On, else, Duty Cycling Off
  */
-void multipleChoice(){
+void multipleChoice()
+{
   if (M5.BtnA.isPressed())
     setupTemperature();
   else

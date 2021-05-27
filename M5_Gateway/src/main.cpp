@@ -137,7 +137,6 @@ static const char *getRes(bool isTemp)
 {
   // Start the scanner
   scanner->start(SCAN_TIME_SEC, false);
-  M5.Lcd.println("Scan done!");
   scanner->clearResults(); // delete results fromBLEScan buffer to release memory
 
   if (client == nullptr || aDevice == nullptr)
@@ -147,7 +146,6 @@ static const char *getRes(bool isTemp)
 
   // Connect to the device
   M5.Lcd.println(aDevice->getName().c_str());
-  M5.Lcd.println("Connecting...");
   bool connected = client->connect(aDevice);
 
   if (!connected)
