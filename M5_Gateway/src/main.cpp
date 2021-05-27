@@ -2,11 +2,11 @@
  * Base code for gateway node development in NWEN439
  * You will need to modify this code to implement the necessary
  * features specified in the handout.
- *
+ * 
  * Important: The compiled code for this module is quite
- * big so you will need to change the partition scheme to
- * "No OTA (Large App)". To do this, click "Tools" on
- * Arduino Studio, then select "No OTA (Large App)" from
+ * big so you will need to change the partition scheme to 
+ * "No OTA (Large App)". To do this, click "Tools" on 
+ * Arduino Studio, then select "No OTA (Large App)" from 
  * Partition Scheme.
  */
 #include <constants.h>
@@ -24,8 +24,8 @@ using namespace M5Constants;
  * SSID and password of the WIFI network
  */
 
-const char *WIFI_SSID = "";
-const char *WIFI_PASSWORD = "";
+const char *WIFI_SSID = "The Ira Street Hooligans";
+const char *WIFI_PASSWORD = "D1CKD33P1NCR4ZY";
 
 /**
  * Time synchronization related stuff
@@ -40,6 +40,7 @@ const int daylightOffset_sec = 0;
  * Once gateway is time synced, you can use this timestamp
  */
 RTC_DATA_ATTR time_t timestamp = 0;
+const int SCAN_TIME_SEC = 5;
 
 /**
  * BLE scanner objects
@@ -69,7 +70,10 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 {
   void onResult(BLEAdvertisedDevice advertisedDevice)
   {
-    if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(SERVICE_UUID) && advertisedDevice.getServiceDataUUID().equals(searchingUUID) && advertisedDevice.getServiceData().compare(searchingFor) == 0)
+    if (advertisedDevice.haveServiceUUID() 
+    && advertisedDevice.isAdvertisingService(SERVICE_UUID) 
+    && advertisedDevice.getServiceDataUUID().equals(searchingUUID) 
+    && advertisedDevice.getServiceData().compare(searchingFor) == 0)
     {
       aDevice = new BLEAdvertisedDevice(advertisedDevice);
       BLEDevice::getScan()->stop();
@@ -81,7 +85,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 // REPLYING TO COAP
 //--------------------------------------------------------------------------
 
-/**
+/** 
  * readAttr:
  * - Given a boolean and service to read from
  * - if the service is null, then we haven't found a service we need
@@ -132,7 +136,7 @@ static const char *readAttr(bool isTemp, BLERemoteService *from)
 static const char *getRes(bool isTemp)
 {
   // Start the scanner
-  scanner->start(5, false);
+  scanner->start(SCAN_TIME_SEC, false);
   M5.Lcd.println("Scan done!");
   scanner->clearResults(); // delete results fromBLEScan buffer to release memory
 
@@ -225,7 +229,7 @@ void callback_humidity(CoapPacket &packet, IPAddress ip, int port)
  * - Create a client to connect to BLE devices
  * - Initalize WIFI
  * - Synchronize time
- * - Initalize CoAP
+ * - Initalize CoAP 
  */
 void setup()
 {
@@ -271,12 +275,10 @@ void setup()
 
 /**
  * Looping:
- * Wait 1 second
  * run the CoAP loop
  */
 void loop()
 {
-  delay(1000);
   delete(client);
   client = BLEDevice::createClient();
   coap.loop();

@@ -5,22 +5,77 @@
 #include <BLE2902.h>
 #include "time.h"
 
-bool typeChoosen = false;
-bool dutyChoosen = false;
-BLEServer *pServer;
-BLEService *pService;
-BLEAdvertisementData *pData;
-bool dutyCycleOn = false;
 enum BLESensorState
 {
   standby,
   advertising,
   connected
 };
+
+// BLE Server Global Data
+BLEServer *pServer;
+BLEService *pService;
+BLEAdvertisementData *pData;
+
+// Duty Cycling Settings
+bool dutyCycleOn = false;
 BLESensorState curState;
 time_t timestamp = 0;
+const int ADVERT_TIME_SEC = 1;
+const int SLEEP_TIME_SEC = 5;
 
 using namespace M5Constants;
+
+//-----------------------------------------------------------------------------
+// Looping functionality
+//-----------------------------------------------------------------------------
+
+/**
+ * Updating the state should also update the 
+ * timestamp, as such, this method ensures both are done
+ * on state update.
+ */
+void updateState(BLESensorState newState)
+{
+  curState = newState;
+  time(&timestamp);
+}
+
+/**
+ * Depending on the state of the Sensor, 
+ * determine the next actions to be taken
+ * during this time.
+ */
+void stateLoop()
+{
+  switch (curState)
+  {
+  case connected:
+    break;
+  case standby:
+    updateState(advertising);
+    pServer->getAdvertising()->start();
+    break;
+  case advertising:
+    if (dutyCycleOn) // If we are duty cycling
+    {
+      // Calculate the difference in time since last update
+      time_t curTime = 0;
+      time(&curTime);
+      double diff = difftime(curTime, timestamp);
+      if (diff >= ADVERT_TIME_SEC) // If the difference is ADVERT_TIME_SEC seconds or more...
+      {
+        updateState(standby);                                       // Then we need to sleep for...
+        int sleepTime = SLEEP_TIME_SEC - (diff - ADVERT_TIME_SEC); // seconds until the next interval
+        M5.Power.lightSleep(SLEEP_SEC(sleepTime));
+      }
+    } // If we are not duty cycling, then just ignore this state.
+  }
+}
+
+//-----------------------------------------------------------------------------
+// Callback functionality
+//-----------------------------------------------------------------------------
 
 /**
  * ServerCallbacks. Overwrites functionality for BLEServerCallbacks.
@@ -33,7 +88,7 @@ class ServerCallbacks : public BLEServerCallbacks
   void onConnect(BLEServer *pServer)
   {
     M5.Lcd.println("Connected");
-    curState = connected;
+    updateState(connected);
   };
 
   /**
@@ -43,7 +98,7 @@ class ServerCallbacks : public BLEServerCallbacks
   void onDisconnect(BLEServer *pServer)
   {
     M5.Lcd.println("Disconnected");
-    curState = standby;
+    updateState(standby);
   }
 };
 
@@ -98,6 +153,10 @@ class HumidCallbacks : public BLECharacteristicCallbacks
     M5.Lcd.println("Read Humidity");
   }
 };
+
+//-----------------------------------------------------------------------------
+// Configurations
+//-----------------------------------------------------------------------------
 
 /**
  * Setup the M5Stack
@@ -170,51 +229,15 @@ void setupHumitidy()
   M5.Lcd.println("Humidity Sensor");
 }
 
-void updateState(BLESensorState newState)
-{
-  curState = newState;
-  time(&timestamp);
-}
-
-void stateLoop()
-{
-  switch (curState)
-  {
-  case connected:
-    break;
-  case standby:
-    updateState(advertising);
-    pServer->getAdvertising()->start();
-    break;
-  case advertising:
-    if (dutyCycleOn) // If we are duty cycling
-    {
-      // Calculate the difference in time since last update
-      time_t curTime = 0;
-      time(&curTime);
-      double diff = difftime(curTime, timestamp);
-      if (diff >= 5) // If the difference is 5 seconds or more...
-      {
-        updateState(standby);           // Then we need to sleep for...
-        int sleepTime = 5 - (diff - 5); // The 5 second intervals inclusive.
-        M5.Power.lightSleep(SLEEP_SEC(sleepTime));
-      }
-    }
-    break; // If we are not duty cycling, then just ignore this state.
-  }
-}
-
 /**
- * Setup:
- * Config the M5Stack.
- * Config the server.
- * Setup the environment (temp/humid).
- * Config and Start Advertising.
+ * Called during the setup process,
+ * if certain buttons are pressed, alter the 
+ * state in which this device will run.
+ * 
+ * ButtonA: If pressed, Temperature sensor, else, Humidity Sensor
+ * ButtonC: If pressed, Duty Cycling On, else, Duty Cycling Off
  */
-void setup()
-{
-  m5Config();
-  serverConfig();
+void multipleChoice(){
   if (M5.BtnA.isPressed())
     setupTemperature();
   else
@@ -230,6 +253,24 @@ void setup()
     M5.Lcd.println("Duty Cycle: Off");
     dutyCycleOn = false;
   }
+}
+
+//-----------------------------------------------------------------------------
+// Base Setup and Loop functionality
+//-----------------------------------------------------------------------------
+
+/**
+ * Setup:
+ * Config the M5Stack.
+ * Config the server.
+ * Setup the environment (temp/humid).
+ * Config and Start Advertising.
+ */
+void setup()
+{
+  m5Config();
+  serverConfig();
+  multipleChoice();
   pService->start();
   pServer->getAdvertising()->setAdvertisementData(*pData);
 }
